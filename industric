@@ -1,0 +1,244 @@
+#include <avr/io.h>
+#include <inttypes.h>
+#include <stdio.h>
+#include <math.h>
+#include <time.h>
+#include <avr/pgmspace.h>
+#include <avr/eeprom.h>
+#include <avr/interrupt.h>
+#include <util/delay.h>
+#include <avr/wdt.h>
+#include <avr/sfr_defs.h>
+#include "u8g.h"
+
+
+
+volatile uint16_t temp_value_1;
+volatile uint16_t temp_value_2;
+volatile uint16_t adc_value_1;
+volatile uint16_t adc_value_2;
+volatile uint16_t Horizontal;
+volatile uint16_t Vertical;
+volatile uint16_t tuta;
+
+#define SETBIT(ADDR,BIT) (ADDR|=(1<<BIT))
+#define CLEARBIT(ADDR,BIT) (ADDR &= ~(1<<BIT))
+#include <avr/pgmspace.h>
+void draw(void);
+void draw_1(void);
+void draw_distance(void);
+void draw_adress(void);
+void usart_init(void);
+void clearOLED();
+void ADC_enable(void);
+u8g_t u8g;
+void WelcomeScreen(void);
+
+static int Terminal (char data, FILE *stream);
+static FILE mystream = FDEV_SETUP_STREAM(Terminal, NULL, _FDEV_SETUP_WRITE); 
+volatile unsigned char data_in[8];
+unsigned char command_in[8];
+volatile unsigned char data_count;
+volatile unsigned char command_ready;
+char mybuf[8];
+#define TRUE 1
+#define FALSE 0
+
+int main(void)
+{
+
+	
+sei();
+wdt_enable(WDTO_1S);
+WDTCSR |= (1 << WDIE) | (0 << WDIF);
+
+
+
+
+
+usart_init();
+ADC_enable();
+stdout = &mystream;
+
+DDRB |= (1<<7);    // saknas i init-funktionen, se kommentar nedan [*]
+u8g_InitSPI(&u8g, &u8g_dev_ssd1306_128x64_hw_spi, PN(1, 7), PN(1, 5), PN(1, 4), PN(1, 2), PN(1,1));	
+
+WelcomeScreen();
+_delay_ms(1000);
+		  
+	
+    while (1) 
+    {
+
+	 
+	 
+ 			draw_adress();
+		  draw_distance();
+
+		  
+
+		  
+    WDTCSR = (1<<WDIE);
+ 	  }
+	  
+
+}
+
+void draw_adress(void){
+
+		u8g_FirstPage(&u8g);
+		do
+		{
+			draw_1();
+		} while ( u8g_NextPage(&u8g) );
+		
+		
+	} 
+	
+void draw_1(void){
+	u8g_SetColorIndex(&u8g, 1);
+	u8g_SetFont(&u8g, u8g_font_9x15);
+	u8g_DrawStr(&u8g, 0, 32, "Adress:");
+//	u8g_SetColorIndex(&u8g, 0);
+}
+
+void draw_distance(void)
+	{
+	
+		u8g_FirstPage(&u8g);
+		do
+		{
+				u8g_SetColorIndex(&u8g,1);
+				sprintf(mybuf, "D: %s ", data_in);
+				u8g_SetFont(&u8g, u8g_font_9x15);
+				u8g_DrawStr(&u8g, 0, 10, mybuf);
+				
+		} while ( u8g_NextPage(&u8g) );
+		
+		}
+
+void WelcomeScreen(void){
+	
+
+	{
+		u8g_FirstPage(&u8g);
+		do
+		{
+		draw();
+		} while ( u8g_NextPage(&u8g) );
+			u8g_Delay(100);
+		
+		}
+	
+}
+void draw(void){
+	u8g_SetColorIndex(&u8g, 1);
+	u8g_SetFont(&u8g, u8g_font_osb18);
+	u8g_DrawStr(&u8g, 0, 32, "Hej du!");
+	u8g_SetColorIndex(&u8g, 0);
+}
+	
+
+
+	
+//sprintf // För att skriva ut en string
+
+//------------------------------- USART------------------------------------------------
+void usart_init(void){
+	SETBIT(DDRD,1);
+	SETBIT(PORTD,1);
+
+	UBRR0 = 0;
+	//UCSR0A = 0x00;
+	UCSR0B = (1 << RXEN0) | (1 << TXEN0) | (1<<RXCIE0 ) ; // Turn on the transmission and reception circuitry
+	
+	UCSR0C = 0;
+	UCSR0C = (1 << UCSZ01) | (1 << UCSZ00) ;
+	
+	
+}
+
+static int Terminal (char data, FILE *stream){
+	
+//uint8_t counter = 0;
+	 while(bit_is_clear(UCSR0A,UDRE0)){
+             
+		/*	 if (counter++ > 1000)
+			 {
+				 return 
+			 }*/
+
+	 }
+	UDR0 = data;
+	return 0;
+ }
+ 
+ ISR(USART0_RX_vect){
+
+	 // get data from usart in register
+	 data_in[data_count] = UDR0;
+	 // end of line!
+	 if (data_in[data_count] == '\r') {
+		  command_ready = TRUE;
+		 data_count = 0;
+		 } else {
+		 data_count++;
+	 }
+ }
+//--------------------------------------------------------------
+ 
+
+//   void clearOLED(){
+// 	  
+// 	  u8g_FirstPage(&u8g);
+// 	  
+// 	  do {
+// 		  u8g_SetColorIndex(&u8g,1);
+// 		  u8g_DrawBox(&u8g, 0, 16, 10 , 15); // x,y position samt hur stor 10x15 
+// 		 
+// 		  u8g_SetColorIndex(&u8g,0);
+// 		  
+// 	  } while( u8g_NextPage(&u8g) );
+// 	
+// 	 }
+
+void ADC_enable(void){
+	ADCSRA = (1 << ADEN); // ADC Enable, no clk div
+	ADMUX = (1 << REFS1) | (1<< REFS0);
+}
+	 
+	 ISR(WDT_vect){
+		 
+		 
+       		 _delay_us(10);
+      		 Horizontal = ADC;
+       		 ADMUX = (0<<MUX0) | (0<< MUX1) | (1<<REFS1) | (1<<REFS0);
+       		 ADCSRA |= (1<<ADSC); // Start ADC again
+			
+			printf("x = %d \n", Horizontal);
+			
+			
+       		 _delay_us(10);
+      		 Vertical = ADC;
+       		 ADMUX = (1<<MUX0) | (0<<MUX1) | (1<<REFS1) | (1<<REFS0);
+      		 ADCSRA |= (1<<ADSC); // Start ADC again
+			   
+			printf("y = %d \n", Vertical);
+			
+// 			
+// 			_delay_us(20);
+//  			tuta = ADC;
+// 			 ADMUX = (0<<MUX0) | (1<< MUX1) | (1<<REFS1) | (1<<REFS0);
+//  			 ADCSRA |= (1<<ADSC); // Start ADC again
+// 			 
+//  			 if (!(PINA == (1 << 2))) {
+//  				 
+//  				 printf("TUT\n");
+// // 				 
+// 			 }
+		
+       		 
+       	 }
+//        
+//         
+        
