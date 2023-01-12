@@ -60,6 +60,9 @@ int main(void)
 {
 	
 sei();
+CLEARBIT(DDRA,2);
+
+
 
 usart_init();
 ADC_enable();
@@ -83,10 +86,10 @@ u8g_InitSPI(&u8g, &u8g_dev_ssd1306_128x64_hw_spi, PN(1, 7), PN(1, 5), PN(1, 4), 
     while (1) 
     {
 	test();
-	_delay_ms(500);
+	_delay_ms(100);
 	
 	
-		if (last_data_received <=5){
+		if (last_data_received <=30){
 			last_data_received++;
 		}
 		
@@ -119,7 +122,7 @@ void draw_distance(void)
 				u8g_DrawStr(&u8g, 0, 10, mybuf);
 				
 			 
-				if (last_data_received >= 5) {
+				if (last_data_received >= 30) {
 					u8g_DrawStr(&u8g, 0, 32, "Offline");
 					
 					} else {
@@ -254,7 +257,7 @@ void test (void){
 			
        		 
       		 Vertical = adc_value;
-			      adc_interrupt_counter=0;
+			      adc_interrupt_counter++;
        		 ADMUX = (1<<MUX0) | (0<<MUX1) | (1<<REFS1) | (1<<REFS0);
       		 ADCSRA |= (1<<ADSC); // Start ADC again
 			
@@ -264,25 +267,21 @@ void test (void){
 		 }
 		
 			 
-// 		 
-// 		else if (adc_interrupt_counter==2){	
-// 			
-//  			tuta = ADC;
-// 			 ADMUX = (0<<MUX0) | (1<< MUX1) | (1<<REFS1) | (1<<REFS0);
-//  			 ADCSRA |= (1<<ADSC); // Start ADC again
-// 			 
-// 			 
-//  			 if (PINA== 0b11111011 ) {
-// 				  adc_interrupt_counter=0;
-//  				 
-//  				 printf("TUT\n");
-// 				 
-// 			 //}
+ 		 
+ 		else if (adc_interrupt_counter==2){	
+ 			
+			 if (bit_is_clear(PINA,2)) {
+			 
+  				 
+  			printf("TUT\n");
+ 				 
+ 			 }
+			  adc_interrupt_counter=0;
 // 		
         	//CLEARBIT(DDRD,6);
 			CLEARBIT(PORTD,6);
         	 }
 	 
-//        
+}
 //         
         
