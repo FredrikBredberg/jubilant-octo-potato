@@ -1,0 +1,97 @@
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <HardwareSerial.h>
+
+// WiFi
+int status = WL_IDLE_STATUS;
+const char* ssid = "iPSK-UMU";
+const char* pwd = "HejHopp!!";
+
+WiFiClient wifiClient;
+
+// MQTT broker setup
+const char broker [] = "tfe.iotwan.se";
+int port = 1883;
+const char* mqtt_usr = "intro22";
+const char* mqtt_pwd = "outro";
+String distance;
+String Inputbuffer;
+PubSubClient client(wifiClient);
+HardwareSerial SerialPort(2);
+
+
+void uart_enable(void) {
+  SerialPort.begin (38400, SERIAL_8N1, 16, 17);
+}
+
+
+void setup() {
+  Serial.begin(38400);
+  pinMode(LED_BUILTIN, OUTPUT);
+  uart_enable();
+
+  // WiFi 
+  //while(status != WL_CONNECTED){
+    Serial.print("Connecting to SSID: ");
+    Serial.println(ssid);
+    status = WiFi.begin(ssid, pwd);
+    // wait a while...
+    delay(10000);
+  //}
+  Serial.println("Now connected to WiFi");
+
+  // MQTT broker
+  client.setServer(broker, port);
+  
+  while (!client.connected()) {
+    Serial.print("Connecting to MQTT ... ");
+    if (client.connect("19", mqtt_usr, mqtt_pwd)) {
+      Serial.println("connected");
+    }else{
+      Serial.print("failed with state: ");
+      Serial.println(client.state());
+      delay (2000);
+    }
+  }
+  client.setCallback(callback);
+  client.subscribe("beacon");
+}
+
+
+
+void callback(char* topic, byte* message, unsigned int length) {
+  Serial.print("Message arrived on topic: ");
+  Serial.print(topic);
+  Serial.print(". Message: ");
+  String messageTemp;
+  
+  for (int i = 0; i < length; i++) {
+    Serial.print((char)message[i]);
+    messageTemp += (char)message[i];
+
+  }
+  Serial.println();
+  Inputbuffer= messageTemp;
+
+  
+}
+
+void loop() {
+  
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(100);                     
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(1000);   
+  client.loop();
+  //client.publish("modig" ,"0");
+  
+ SerialPort.println(Inputbuffer); 
+
+ while(SerialPort.available() >= 1){
+    distance = SerialPort.readStringUntil('\n');
+      client.publish("FredriksCar",distance.c_str());
+
+ }
+}
+
+
