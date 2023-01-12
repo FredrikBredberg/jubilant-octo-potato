@@ -1,5 +1,6 @@
 #include <avr/io.h>
 #include <inttypes.h>
+#include <string.h>
 #include <stdio.h>
 #include <math.h>
 #include <time.h>
@@ -13,13 +14,20 @@
 
 
 
-volatile uint16_t temp_value_1;
+volatile unsigned char temp_value_1;
 volatile uint16_t temp_value_2;
 volatile uint16_t adc_value_1;
 volatile uint16_t adc_value_2;
 volatile uint16_t Horizontal;
 volatile uint16_t Vertical;
 volatile uint16_t tuta;
+volatile uint16_t adc_interrupt_counter = 0;
+volatile uint16_t adc_value;
+volatile uint8_t welcome_screen_flag = 0;
+volatile uint16_t last_data_received=0;
+volatile uint8_t new_data_flag = 0;
+volatile uint8_t buttonState = 0;
+ 
 
 #define SETBIT(ADDR,BIT) (ADDR|=(1<<BIT))
 #define CLEARBIT(ADDR,BIT) (ADDR &= ~(1<<BIT))
@@ -29,6 +37,8 @@ void draw_1(void);
 void draw_distance(void);
 void draw_adress(void);
 void usart_init(void);
+
+
 void clearOLED();
 void ADC_enable(void);
 u8g_t u8g;
@@ -36,23 +46,24 @@ void WelcomeScreen(void);
 
 static int Terminal (char data, FILE *stream);
 static FILE mystream = FDEV_SETUP_STREAM(Terminal, NULL, _FDEV_SETUP_WRITE); 
-volatile unsigned char data_in[8];
+volatile unsigned char data_in[32];
 unsigned char command_in[8];
 volatile unsigned char data_count;
 volatile unsigned char command_ready;
-char mybuf[8];
+
+char mybuf[32];
 #define TRUE 1
 #define FALSE 0
 
 int main(void)
 {
-
+	CLEARBIT(DDRA,2);
+	TCCR0A = (1<<WGM01);
+	TCCR0B = (1<<CS02)|(1<<CS00);
+	TIMSK0 = (1<<OCIE0A);
+	OCR0A = 60;
 	
 sei();
-wdt_enable(WDTO_1S);
-WDTCSR |= (1 << WDIE) | (0 << WDIF);
-
-
 
 
 
@@ -61,46 +72,44 @@ ADC_enable();
 stdout = &mystream;
 
 DDRB |= (1<<7);    // saknas i init-funktionen, se kommentar nedan [*]
-u8g_InitSPI(&u8g, &u8g_dev_ssd1306_128x64_hw_spi, PN(1, 7), PN(1, 5), PN(1, 4), PN(1, 2), PN(1,1));	
+u8g_InitSPI(&u8g, &u8g_dev_ssd1306_128x64_hw_spi, PN(1, 7), PN(1, 5), PN(1, 4), PN(1, 2), PN(1,1));
 
-WelcomeScreen();
-_delay_ms(1000);
-		  
+if(welcome_screen_flag == 0)
+{
+	WelcomeScreen();
+	_delay_ms(3000);
+	
+	welcome_screen_flag = 1;
+
+	
+}
+
+
+/*clearOLED();*/
 	
     while (1) 
     {
 
-	 
-	 
- 			draw_adress();
-		  draw_distance();
+	
+	
+		if (last_data_received <=300){
+			last_data_received++;
+		}
+		draw_distance();
+	  
+	
+
+		 
 
 		  
 
-		  
-    WDTCSR = (1<<WDIE);
  	  }
 	  
 
 }
 
-void draw_adress(void){
 
-		u8g_FirstPage(&u8g);
-		do
-		{
-			draw_1();
-		} while ( u8g_NextPage(&u8g) );
-		
-		
-	} 
-	
-void draw_1(void){
-	u8g_SetColorIndex(&u8g, 1);
-	u8g_SetFont(&u8g, u8g_font_9x15);
-	u8g_DrawStr(&u8g, 0, 32, "Adress:");
-//	u8g_SetColorIndex(&u8g, 0);
-}
+
 
 void draw_distance(void)
 	{
@@ -113,6 +122,15 @@ void draw_distance(void)
 				u8g_SetFont(&u8g, u8g_font_9x15);
 				u8g_DrawStr(&u8g, 0, 10, mybuf);
 				
+			 
+				if (last_data_received >= 200) {
+					u8g_DrawStr(&u8g, 0, 32, "Offline");
+					
+					} else {
+						
+					u8g_DrawStr(&u8g, 0, 32, "Online");
+				}
+			
 		} while ( u8g_NextPage(&u8g) );
 		
 		}
@@ -127,6 +145,7 @@ void WelcomeScreen(void){
 		draw();
 		} while ( u8g_NextPage(&u8g) );
 			u8g_Delay(100);
+			
 		
 		}
 	
@@ -140,7 +159,6 @@ void draw(void){
 	
 
 
-	
 //sprintf // För att skriva ut en string
 
 //------------------------------- USART------------------------------------------------
@@ -148,7 +166,7 @@ void usart_init(void){
 	SETBIT(DDRD,1);
 	SETBIT(PORTD,1);
 
-	UBRR0 = 0;
+	UBRR0 = 12;
 	//UCSR0A = 0x00;
 	UCSR0B = (1 << RXEN0) | (1 << TXEN0) | (1<<RXCIE0 ) ; // Turn on the transmission and reception circuitry
 	
@@ -177,68 +195,98 @@ static int Terminal (char data, FILE *stream){
 
 	 // get data from usart in register
 	 data_in[data_count] = UDR0;
+	 last_data_received=0;
 	 // end of line!
 	 if (data_in[data_count] == '\r') {
-		  command_ready = TRUE;
+		 command_ready = TRUE;
 		 data_count = 0;
+		
+
 		 } else {
 		 data_count++;
+		 
+		
 	 }
  }
+
 //--------------------------------------------------------------
  
 
-//   void clearOLED(){
-// 	  
-// 	  u8g_FirstPage(&u8g);
-// 	  
-// 	  do {
-// 		  u8g_SetColorIndex(&u8g,1);
-// 		  u8g_DrawBox(&u8g, 0, 16, 10 , 15); // x,y position samt hur stor 10x15 
-// 		 
-// 		  u8g_SetColorIndex(&u8g,0);
-// 		  
-// 	  } while( u8g_NextPage(&u8g) );
-// 	
-// 	 }
+  void clearOLED(){
+	  
+	  u8g_FirstPage(&u8g);
+	  
+	  do {
+		  u8g_SetColorIndex(&u8g,0);
+		  u8g_DrawBox(&u8g, 0, 16, 10 , 15); // x,y position samt hur stor 10x15 
+		 
+		  u8g_SetColorIndex(&u8g,0);
+		  
+	  } while( u8g_NextPage(&u8g) );
+	
+	 }
 
 void ADC_enable(void){
 	ADCSRA = (1 << ADEN); // ADC Enable, no clk div
 	ADMUX = (1 << REFS1) | (1<< REFS0);
 }
 	 
-	 ISR(WDT_vect){
+	 /*ISR(WDT_vect)*/
+	 ISR(TIMER0_COMPA_vect){
 		 
 		 
-       		 _delay_us(10);
-      		 Horizontal = ADC;
+		 SETBIT(DDRD,6);
+		 SETBIT(PORTD,6);
+
+		 
+		 adc_value = ADC;
+		 
+		 if (adc_interrupt_counter == 0){
+			 
+       		 
+      		 Horizontal = adc_value;
+			  adc_interrupt_counter++;
        		 ADMUX = (0<<MUX0) | (0<< MUX1) | (1<<REFS1) | (1<<REFS0);
        		 ADCSRA |= (1<<ADSC); // Start ADC again
+				
+				
+			printf("x%d\n", Horizontal);
 			
-			printf("x = %d \n", Horizontal);
+		 }
+		 
+		 else if (adc_interrupt_counter==1){
 			
-			
-       		 _delay_us(10);
-      		 Vertical = ADC;
+       		 
+      		 Vertical = adc_value;
+			      adc_interrupt_counter=0;
        		 ADMUX = (1<<MUX0) | (0<<MUX1) | (1<<REFS1) | (1<<REFS0);
       		 ADCSRA |= (1<<ADSC); // Start ADC again
-			   
-			printf("y = %d \n", Vertical);
 			
+			   
+			printf("y%d\n", Vertical);
+			wdt_reset();
+		 }
+		
+			 
+// 		 
+// 		else if (adc_interrupt_counter==2){	
 // 			
-// 			_delay_us(20);
 //  			tuta = ADC;
 // 			 ADMUX = (0<<MUX0) | (1<< MUX1) | (1<<REFS1) | (1<<REFS0);
 //  			 ADCSRA |= (1<<ADSC); // Start ADC again
 // 			 
-//  			 if (!(PINA == (1 << 2))) {
+// 			 
+//  			 if (PINA== 0b11111011 ) {
+// 				  adc_interrupt_counter=0;
 //  				 
 //  				 printf("TUT\n");
-// // 				 
-// 			 }
-		
-       		 
-       	 }
+// 				 
+// 			 //}
+// 		
+        	//CLEARBIT(DDRD,6);
+			CLEARBIT(PORTD,6);
+//        	 }
+	 }
 //        
 //         
         
