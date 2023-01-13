@@ -37,7 +37,7 @@ void draw_1(void);
 void draw_distance(void);
 void draw_adress(void);
 void usart_init(void);
-void test(void);
+void Get_adc_values(void);
 
 void clearOLED();
 void ADC_enable(void);
@@ -59,57 +59,37 @@ char mybuf[32];
 int main(void)
 {
 	
-sei();
-CLEARBIT(DDRA,2);
-
-
-
-usart_init();
-ADC_enable();
-stdout = &mystream;
-
-
-DDRB |= (1<<7);    // saknas i init-funktionen, se kommentar nedan [*]
-u8g_InitSPI(&u8g, &u8g_dev_ssd1306_128x64_hw_spi, PN(1, 7), PN(1, 5), PN(1, 4), PN(1, 2), U8G_PIN_NONE/*PN(1,1)*/);
-
-
- 	WelcomeScreen();
+	sei();
+	CLEARBIT(DDRA,2); // gör tuta till ingång
+	usart_init();
+	ADC_enable();
+	stdout = &mystream; // Printf via usart
+	//--------------- Init för skärm samt  Skriver ut välkomsstkärm -------------------------
+	
+	DDRB |= (1<<7);    // saknas i init-funktionen, se kommentar nedan [*]
+	u8g_InitSPI(&u8g, &u8g_dev_ssd1306_128x64_hw_spi, PN(1, 7), PN(1, 5), PN(1, 4), PN(1, 2), U8G_PIN_NONE/*PN(1,1)*/);
+ 	WelcomeScreen(); // Skriver "Hej du!" i ca 3 sek
 	 _delay_ms(3000);
- 	
-// 	welcome_screen_flag = 1;
-// 
-// 	
-//
+ 	//---------------------------------------------------------------------------------------
 
 /*clearOLED();*/
 	
     while (1) 
     {
-	test();
-	_delay_ms(100);
+		 Get_adc_values();
+		_delay_ms(200);
 	
 	
-		if (last_data_received <=30){
+		if (last_data_received <=30){ // Plussar på Last_data_received <= 30, resettar countern till 0 om USART data kommer in, om Countern kommer upp tillräckligt högt så skrivs "offline" ut på skärmen
 			last_data_received++;
+			
 		}
-		
-		
+
 		draw_distance();
-	  
-	
-
-		 
-
-		  
-
  	  }
-	  
-
 }
 
-
-
-
+//-------------------------------------- OLED funktioner --------------------------------------
 void draw_distance(void)
 	{
 	
@@ -127,7 +107,7 @@ void draw_distance(void)
 					
 					} else {
 						
-					u8g_DrawStr(&u8g, 0, 32, "Online");
+						u8g_DrawStr(&u8g, 0, 32, "Online");
 				}
 			
 		} while ( u8g_NextPage(&u8g) );
@@ -140,11 +120,8 @@ void WelcomeScreen(void){
 		u8g_FirstPage(&u8g);
 		do
 		{
-		draw();
+			draw();
 		} while ( u8g_NextPage(&u8g) );
-			
-			
-		
 		}
 	
 }
@@ -155,10 +132,7 @@ void draw(void){
 	//u8g_SetColorIndex(&u8g, 0);
 }
 	
-
-
 //sprintf // För att skriva ut en string
-
 //------------------------------- USART------------------------------------------------
 void usart_init(void){
 	SETBIT(DDRD,1);
@@ -170,8 +144,6 @@ void usart_init(void){
 	
 	UCSR0C = 0;
 	UCSR0C = (1 << UCSZ01) | (1 << UCSZ00) ;
-	
-	
 }
 
 static int Terminal (char data, FILE *stream){
@@ -210,7 +182,7 @@ static int Terminal (char data, FILE *stream){
 //--------------------------------------------------------------
  
 
-  void clearOLED(){
+ void clearOLED(){
 	  
 	  u8g_FirstPage(&u8g);
 	  
@@ -230,14 +202,10 @@ void ADC_enable(void){
 }
 	 
 	 /*ISR(WDT_vect)*/
-void test (void){
-	 
-		 
-		 
+void Get_adc_values(void){
+ 
 		 SETBIT(DDRD,6);
 		 SETBIT(PORTD,6);
-
-		 
 		 adc_value = ADC;
 		 
 		 if (adc_interrupt_counter == 0){
@@ -247,41 +215,28 @@ void test (void){
 			 adc_interrupt_counter++;
        		 ADMUX = (0<<MUX0) | (0<< MUX1) | (1<<REFS1) | (1<<REFS0);
        		 ADCSRA |= (1<<ADSC); // Start ADC again
-				
-				
 			 printf("x%d\n", Horizontal);
 			
 		 }
 		 
 		 else if (adc_interrupt_counter==1){
-			
-       		 
-      		 Vertical = adc_value;
-			      adc_interrupt_counter++;
-       		 ADMUX = (1<<MUX0) | (0<<MUX1) | (1<<REFS1) | (1<<REFS0);
-      		 ADCSRA |= (1<<ADSC); // Start ADC again
-			
-			   
+
+      		Vertical = adc_value;
+			adc_interrupt_counter++;
+       		ADMUX = (1<<MUX0) | (0<<MUX1) | (1<<REFS1) | (1<<REFS0);
+      		ADCSRA |= (1<<ADSC); // Start ADC again
 			printf("y%d\n", Vertical);
 			
 		 }
-		
-			 
- 		 
+
  		else if (adc_interrupt_counter==2){	
  			
 			 if (bit_is_clear(PINA,2)) {
-			 
-  				 
-  			printf("TUT\n");
- 				 
+  					printf("z\n");
  			 }
-			  adc_interrupt_counter=0;
-// 		
-        	//CLEARBIT(DDRD,6);
-			CLEARBIT(PORTD,6);
+			adc_interrupt_counter=0;
         	 }
-	 
+	 CLEARBIT(PORTD,6);
 }
-//         
+   
         
