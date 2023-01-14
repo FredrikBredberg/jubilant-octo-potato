@@ -23,10 +23,10 @@ volatile uint16_t Vertical;
 volatile uint16_t tuta;
 volatile uint16_t adc_interrupt_counter = 0;
 volatile uint16_t adc_value;
-volatile uint8_t welcome_screen_flag = 0;
+volatile uint16_t counter_adc_values=0;
 volatile uint16_t last_data_received=0;
 volatile uint8_t new_data_flag = 0;
-volatile uint8_t buttonState = 0;
+
  
 
 #define SETBIT(ADDR,BIT) (ADDR|=(1<<BIT))
@@ -38,8 +38,8 @@ void draw_distance(void);
 void draw_adress(void);
 void usart_init(void);
 void Get_adc_values(void);
-
-void clearOLED();
+void timer_init(void);
+void clearOLED(void);
 void ADC_enable(void);
 
 u8g_t u8g;
@@ -63,6 +63,7 @@ int main(void)
 	CLEARBIT(DDRA,2); // gör tuta till ingång
 	usart_init();
 	ADC_enable();
+	timer_init();
 	stdout = &mystream; // Printf via usart
 	//--------------- Init för skärm samt  Skriver ut välkomsstkärm -------------------------
 	
@@ -76,16 +77,20 @@ int main(void)
 	
     while (1) 
     {
-		 Get_adc_values();
-		_delay_ms(200);
+		
 	
 	
-		if (last_data_received <=30){ // Plussar på Last_data_received <= 30, resettar countern till 0 om USART data kommer in, om Countern kommer upp tillräckligt högt så skrivs "offline" ut på skärmen
+		if (last_data_received <=60){ // Plussar på Last_data_received <= 30, resettar countern till 0 om USART data kommer in, om Countern kommer upp tillräckligt högt så skrivs "offline" ut på skärmen
 			last_data_received++;
 			
 		}
 
 		draw_distance();
+		
+		if (bit_is_clear(PINA,2)) {
+			printf("z\n");
+		}
+		
  	  }
 }
 
@@ -97,12 +102,12 @@ void draw_distance(void)
 		do
 		{
 				u8g_SetColorIndex(&u8g,1);
-				sprintf(mybuf, "D: %s ", data_in);
+				sprintf(mybuf, "D:%s cm", data_in);
 				u8g_SetFont(&u8g, u8g_font_9x15);
 				u8g_DrawStr(&u8g, 0, 10, mybuf);
 				
 			 
-				if (last_data_received >= 30) {
+				if (last_data_received >= 60) {
 					u8g_DrawStr(&u8g, 0, 32, "Offline");
 					
 					} else {
@@ -147,18 +152,17 @@ void usart_init(void){
 }
 
 static int Terminal (char data, FILE *stream){
-	
-//uint8_t counter = 0;
+
 	 while(bit_is_clear(UCSR0A,UDRE0)){
-             
-		/*	 if (counter++ > 1000)
-			 {
-				 return 
-			 }*/
 
 	 }
-	UDR0 = data;
+		UDR0 = data;
 	return 0;
+ }
+ void timer_init(){
+	 //prescaler 64
+	 TCCR0B |= (1 << CS00) | (1 << CS02);
+	 TIMSK0 |= (1 << TOIE0);
  }
  
  ISR(USART0_RX_vect){
@@ -167,7 +171,7 @@ static int Terminal (char data, FILE *stream){
 	 data_in[data_count] = UDR0;
 	 last_data_received=0;
 	 // end of line!
-	 if (data_in[data_count] == '\r') {
+	 if (data_in[data_count] == '\n') {
 		 command_ready = TRUE;
 		 data_count = 0;
 		
@@ -177,6 +181,14 @@ static int Terminal (char data, FILE *stream){
 		 
 		
 	 }
+ }
+ 
+ ISR(TIMER0_OVF_vect){
+	 if(counter_adc_values >= 10){
+		  Get_adc_values();
+		 counter_adc_values = 0;
+	 }
+	 counter_adc_values++;
  }
 
 //--------------------------------------------------------------
@@ -201,7 +213,6 @@ void ADC_enable(void){
 	ADMUX = (1 << REFS1) | (1<< REFS0);
 }
 	 
-	 /*ISR(WDT_vect)*/
 void Get_adc_values(void){
  
 		 SETBIT(DDRD,6);
@@ -222,20 +233,13 @@ void Get_adc_values(void){
 		 else if (adc_interrupt_counter==1){
 
       		Vertical = adc_value;
-			adc_interrupt_counter++;
+			adc_interrupt_counter=0;
        		ADMUX = (1<<MUX0) | (0<<MUX1) | (1<<REFS1) | (1<<REFS0);
       		ADCSRA |= (1<<ADSC); // Start ADC again
 			printf("y%d\n", Vertical);
 			
 		 }
 
- 		else if (adc_interrupt_counter==2){	
- 			
-			 if (bit_is_clear(PINA,2)) {
-  					printf("z\n");
- 			 }
-			adc_interrupt_counter=0;
-        	 }
 	 CLEARBIT(PORTD,6);
 }
    
