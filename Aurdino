@@ -54,7 +54,7 @@ void setup() {
     }
   }
   client.setCallback(callback);
-  client.subscribe("beacon");
+  client.subscribe("VictorsCar");
 }
 
 
@@ -72,6 +72,7 @@ void callback(char* topic, byte* message, unsigned int length) {
   }
   Serial.println();
   Inputbuffer= messageTemp;
+   SerialPort.println(Inputbuffer); 
 
   
 }
@@ -85,7 +86,7 @@ void loop() {
   client.loop();
   //client.publish("modig" ,"0");
   
- SerialPort.println(Inputbuffer); 
+
 
  while(SerialPort.available() >= 1){
     distance = SerialPort.readStringUntil('\n');
